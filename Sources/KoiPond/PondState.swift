@@ -70,11 +70,16 @@ final class PondState: ObservableObject {
 
     func addCustomFish() {
         let spec = KoiSpec(body: newFishColor, mark: brushColor, scale: 1.0, speed: 0.95, pattern: .custom, strokes: customStrokes)
+        customStrokes = []
+        editorOpen = false
+        addFish(spec)
+    }
+
+    /// Keeps a fish across launches and swims it in; also used by `koipond://fish` links.
+    func addFish(_ spec: KoiSpec) {
         customFish.append(spec)
         if customFish.count > Self.maxCustomFish { customFish.removeFirst(customFish.count - Self.maxCustomFish) }
         saveCustomFish()
-        customStrokes = []
-        editorOpen = false
         fishAdded.send(spec)
     }
 

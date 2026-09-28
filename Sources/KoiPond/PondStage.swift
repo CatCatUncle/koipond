@@ -133,6 +133,8 @@ final class PondStage: StageScene {
     }
 
     /// A freshly drawn fish splashes in at the centre of the pond.
+    func contains(_ id: UUID) -> Bool { fish.contains { $0.spec.id == id } }
+
     func introduce(_ spec: KoiSpec) {
         let center = CGPoint(x: size.width / 2, y: size.height * 0.45)
         let f = addFish(spec, at: center)

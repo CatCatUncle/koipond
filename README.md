@@ -12,7 +12,7 @@
 
 原生 SwiftUI + SpriteKit，常驻 60fps，空闲 CPU 个位数；零第三方依赖、零联网。
 
-[下载即用](#-下载即用) · [怎么玩](#-怎么玩) · [自己编译](#️-自己编译) · [性能是怎么做的](#-性能是怎么做的) · [**企业 FDE 合作**](#-关于作者--合作)
+[下载即用](#-下载即用) · [怎么玩](#-怎么玩) · [**让 AI 帮你玩**](#-让-ai-帮你玩codex--openworkbuddy--claude-code) · [自己编译](#️-自己编译) · [性能是怎么做的](#-性能是怎么做的) · [**企业 FDE 合作**](#-关于作者--合作)
 
 <b>🤝 推荐搭配 <a href="https://github.com/CatCatUncle/openworkbuddy">OpenWorkBuddy</a> 使用 —— 最好用的本地开源 AI 办公 Agent</b><br>
 <sub>🏢 企业 FDE 驻场 / Agent 落地 / 私有化部署合作 → <a href="mailto:contact@aijentra.com"><b>contact@aijentra.com</b></a></sub>
@@ -60,6 +60,8 @@
 | 🖌️ **画锦鲤** | 在鱼身上画自己的花纹，放进池塘后花纹贴着鱼身一起摆动；最多留 20 条，重启还在 |
 | 💃 **牵手共舞 / 腹肌挑战** | 两个角色小场景，点一下有反应 |
 | 🎵 **配乐** | 选一首本地音乐循环播放，不带任何内置音频 |
+| 🔗 **链接遥控** | `koipond://` 链接切场景、撒食、弹提示、放一条画好的鱼——脚本、快捷指令、AI Agent 都能指挥 |
+| 🤖 **自带 AI 技能** | 仓库就是一个 Agent 插件，装进 OpenWorkBuddy / Codex / Claude Code，说一句「画条肚子上有爱心的锦鲤」就放进来了 |
 | 🖱️ **两种模式** | 互动模式能逗鱼；穿透模式鱼塘沉到桌面图标下面，点击全部穿过去，桌面照常用 |
 
 ## 📦 下载即用
@@ -85,6 +87,73 @@
 | 菜单栏 → 互动模式 | 切回来逗鱼 |
 | 菜单栏 → ⌘1 / ⌘2 / ⌘3 | 切场景 |
 | 菜单栏 → 退出鱼塘 | ⌘Q |
+
+## 🔗 用链接遥控鱼塘
+
+装好并打开过一次之后，任何能打开网址的东西都能指挥鱼塘。`-g` 表示在后台执行、不抢焦点：
+
+```bash
+open -g "koipond://scene/pond"                                  # 切场景：pond / dance / touch
+open -g "koipond://night?on=1"                                  # 入夜；on=0 白天；不带参数就切换
+open -g "koipond://feed?x=0.5&y=0.4"                            # 在屏幕这个位置撒一把鱼食（0–1，y 从上往下）
+open -g "koipond://caption?title=%E6%B5%8B%E8%AF%95%E9%80%9A%E8%BF%87&seconds=6"   # 弹一条提示（中文要 URL 编码）
+open -g "koipond://fish?body=%231F2A33&mark=%23F0C060&pattern=showa&scale=1.3"      # 放一条锦鲤
+open -g "koipond://fish/release"                                # 放走所有画的鱼
+open -g "koipond://snapshot?path=/tmp/pond.png"                 # 截一张图
+open -g "koipond://mode?interactive=0"                          # 穿透模式；1 切回互动
+```
+
+不想手写编码，用仓库里的小脚本（只依赖系统自带 Python）：
+
+```bash
+S=skills/koipond-fish-designer/scripts/koi-link.py
+python3 $S caption "该起来走走了" "已经坐了 50 分钟"
+python3 $S fish --body "#F5E8C7" --mark "#D4452A" --preset heart     # 白底红心锦鲤
+python3 $S fish --body "#1F2A33" --mark "#F0C060" --preset moon      # 墨鲤驮着金月牙
+```
+
+`fish` 还能收一整套自定义笔画（JSON），坐标、预设图案（heart / moon / star / wave / stripes / dots / crown）和配色见 [koipond-fish-designer](skills/koipond-fish-designer/SKILL.md)。写错了鱼塘会弹一条提示告诉你哪里不对，不会静默失败。
+
+### 几个现成玩法
+
+```bash
+# 测试跑完：过了弹提示，挂了池塘入夜
+npm test && open -g "koipond://caption?title=%E6%B5%8B%E8%AF%95%E9%80%9A%E8%BF%87" || open -g "koipond://night?on=1"
+
+# 番茄钟：25 分钟后鱼群聚到屏幕中间
+sleep 1500 && python3 $S caption "休息 5 分钟" && python3 $S feed 0.5 0.5
+
+# 每天 15:00 提醒喝水（crontab -e 加一行）
+0 15 * * * open -g "koipond://caption?title=%E5%96%9D%E5%8F%A3%E6%B0%B4"
+```
+
+macOS「快捷指令」里用「打开 URL」动作填这些链接，就能绑到快捷键、专注模式或者自动化上。
+
+## 🤖 让 AI 帮你玩（Codex / OpenWorkBuddy / Claude Code）
+
+仓库根目录有 `plugin.json`、`skills/` 三个技能和给编码 Agent 看的 `AGENTS.md`，装进去 AI 就知道怎么遥控鱼塘、怎么画鱼、怎么改源码：
+
+| 技能 | 说一句话试试 |
+|---|---|
+| [koipond-control](skills/koipond-control/SKILL.md) | 「测试跑完让鱼塘提醒我」「每天下午三点让鱼塘提醒我喝水」「把鱼塘切到晚上」 |
+| [koipond-fish-designer](skills/koipond-fish-designer/SKILL.md) | 「画一条肚子上有爱心的锦鲤放进鱼塘」「做一条公司 logo 配色的鱼」「放一条驮着月亮的黑鲤」 |
+| [koipond-mod](skills/koipond-mod/SKILL.md) | 「给鱼塘加一个国庆主题」「点荷叶的时候冒出一只青蛙」「加一个 koipond://rain 下雨指令」 |
+
+**OpenWorkBuddy**：专家 · 技能 · 连接器 → 插件 → 粘贴 `https://github.com/CatCatUncle/koipond` 安装，三个技能自动出现，直接在对话里说。
+
+**Codex**：
+
+```bash
+git clone https://github.com/CatCatUncle/koipond.git
+cp -R koipond/skills/* ~/.codex/skills/     # 全局可用
+# 要改源码就直接在仓库里开 codex，它会读 AGENTS.md
+```
+
+**Claude Code**：`cp -R koipond/skills/* ~/.claude/skills/`，或者在仓库目录里直接用。
+
+<p align="center"><img src="docs/img/agent-fish.jpg" alt="用链接放进来的爱心、月牙、星星、波浪和丹顶锦鲤" width="100%"><br><sub>一句话放进来的五条鱼：爱心、墨鲤月牙、星星、青鲤波浪、丹顶</sub></p>
+
+AI 画完鱼会自己截一张鱼塘图看效果，看不清会自己调粗细和大小再放一次。
 
 ## 🛠️ 自己编译
 
@@ -120,11 +189,12 @@ swift run -c release
 
 | 变量 | 作用 |
 |---|---|
-| `KOI_SELFTEST=1` | 跑 10 项自检（窗口层级、点击分发、控制栏、画鱼窗口），打印 PASS/FAIL 后退出 |
+| `KOI_SELFTEST=1` | 跑 13 项自检（链接解析、窗口层级、点击分发、控制栏、画鱼窗口），打印 PASS/FAIL 后退出 |
 | `KOI_TOUR=1` | 依次切过每个场景和开关，打印每一步的帧率和最慢一帧 |
 | `KOI_SNAPSHOT=out.png` | 启动后截一张鱼塘图就退出（配 `KOI_SNAPSHOT_DELAY` 秒数） |
 | `KOI_SCENE=pond\|dance\|touch` | 指定开场场景 |
 | `KOI_NIGHT=0\|1`、`KOI_EDITOR=1`、`KOI_TOOLBAR=0\|1` | 昼夜、打开画鱼窗口、控制栏显隐 |
+| `KOI_LINKS="koipond://… koipond://…"` | 启动后依次执行这些链接，配 `KOI_SNAPSHOT` 验效果 |
 | `KOI_STATS=1`、`KOI_FPS=30` | 显示 SpriteKit 统计、限制帧率 |
 
 ```bash
@@ -135,7 +205,8 @@ swift build -c release && KOI_SELFTEST=1 .build/release/KoiPond
 
 ```
 Sources/KoiPond/
-├── KoiPondApp.swift      # 应用入口、窗口、菜单栏、自检和巡检
+├── KoiPondApp.swift      # 应用入口、窗口、菜单栏、链接执行、自检和巡检
+├── Commands.swift        # koipond:// 链接解析
 ├── PondStage.swift       # 鱼塘：群游、撒食、水波、荷叶
 ├── FishArt.swift         # 锦鲤绘制和纹理缓存
 ├── PortraitStages.swift  # 角色小场景
@@ -145,6 +216,9 @@ Sources/KoiPond/
 ├── StageScene.swift      # 场景基类
 ├── Models.swift          # 场景、颜色、锦鲤数据
 └── Diagnostics.swift     # 帧率统计、卡顿看门狗
+skills/                   # 三个 Agent 技能 + koi-link.py
+plugin.json               # Agent Plugin 清单（OpenWorkBuddy 等可直接安装）
+AGENTS.md                 # 给编码 Agent 的构建和约定说明
 ```
 
 ## ⭐ Star History

@@ -28,6 +28,8 @@ struct DebugOptions {
     var showToolbar: Bool? { env["KOI_TOOLBAR"].map { $0 == "1" } }
     /// Normalised points (0...1, y from the top) to tap shortly after launch, e.g. "0.5,0.5;0.3,0.6".
     var taps: [CGPoint] { points(env["KOI_TAPS"]) }
+    /// koipond:// links to run after launch, whitespace-separated; same path as `open koipond://…`.
+    var links: [URL] { (env["KOI_LINKS"] ?? "").split(whereSeparator: \.isWhitespace).compactMap { URL(string: String($0)) } }
     var pointer: CGPoint? { points(env["KOI_POINTER"]).first }
     /// Feeds synthetic clicks through the window to check what receives them, prints the verdict, quits.
     var selfTest: Bool { env["KOI_SELFTEST"] == "1" }
@@ -137,6 +139,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var stage: StageScene? { skView.scene as? StageScene }
     private var pondTaps = 0
+    /// Links that arrive while the app is still launching run once the pond is up.
+    private var pendingLinks: [URL] = []
+    private var launched = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleGetURL(_:reply:)),
+                                                     forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         StallWatchdog.shared.start(logToDisk: !debug.quiet)
@@ -167,6 +177,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             state.showCaption(state.scene.rawValue, hint(for: state.scene) + "\n控制栏会自动收起，鼠标移到屏幕顶部中间就会出来", seconds: 6)
         }
         runDebugHooks()
+        launched = true
+        pendingLinks.forEach(handle(link:))
+        pendingLinks = []
+    }
+
+    // MARK: koipond:// links
+
+    @objc private func handleGetURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue, let url = URL(string: text) else { return }
+        if launched { handle(link: url) } else { pendingLinks.append(url) }
+    }
+
+    private func handle(link url: URL) {
+        let (command, error) = PondCommand.parse(url)
+        guard let command else {
+            NSLog("KoiPond: ignored link \(url.absoluteString): \(error ?? "")")
+            state.showCaption("没看懂这条指令", error ?? url.absoluteString)
+            return
+        }
+        lastActivity = Date()
+        switch command {
+        case .scene(let scene): state.scene = scene
+        case .night(let on):
+            state.night = on ?? !state.night
+            if state.scene != .pond { state.scene = .pond }
+        case .interactive(let on): state.interactive = on
+        case .feed(let p):
+            if state.scene != .pond { state.scene = .pond }
+            // A fresh scene needs a beat before it takes taps.
+            DispatchQueue.main.asyncAfter(deadline: .now() + (stage is PondStage ? 0 : 0.6)) { [weak self] in
+                guard let stage = self?.stage else { return }
+                stage.tap(at: CGPoint(x: p.x * stage.size.width, y: (1 - p.y) * stage.size.height))
+            }
+        case .caption(let title, let detail, let seconds): state.showCaption(title, detail, seconds: seconds)
+        case .addFish(let spec): state.addFish(spec)
+        case .releaseFish: state.releaseCustomFish()
+        case .snapshot(let path): writeSnapshot(to: path)
+        }
     }
 
     /// A second copy would stack another full-screen pond on the desktop and double the work.
@@ -357,8 +405,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         state.fishAdded.receive(on: DispatchQueue.main).sink { [weak self] spec in
             guard let self else { return }
-            if let pond = self.stage as? PondStage { pond.introduce(spec) } else { self.state.scene = .pond }
             self.lastActivity = Date()
+            if let pond = self.stage as? PondStage, !pond.contains(spec.id) { return pond.introduce(spec) }
+            // Mid scene change the outgoing stage is still showing; swim the fish in once the pond is up.
+            self.state.scene = .pond
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                if let pond = self?.stage as? PondStage, !pond.contains(spec.id) { pond.introduce(spec) }
+            }
         }.store(in: &cancellables)
 
         state.customFishReleased.receive(on: DispatchQueue.main).sink { [weak self] in
@@ -596,6 +649,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 stage.tap(at: CGPoint(x: tap.x * stage.size.width, y: (1 - tap.y) * stage.size.height))
             }
         }
+        for (i, link) in debug.links.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8 + Double(i) * 0.4) { [weak self] in self?.handle(link: link) }
+        }
         if debug.selfTest { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.runSelfTest() } }
         if debug.tour { runTour() }
         if let path = debug.snapshotPath {
@@ -673,6 +729,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let w = overlay.bounds.width, h = overlay.bounds.height
 
         // Window stacking: the pond has to sit above Finder's desktop-icon window to get clicks.
+        let fishLink = URL(string: "koipond://fish?body=%23222222&mark=%23F0B040&strokes=%5B%7B%22points%22:%5B%5B0.2,0.5%5D,%5B0.8,0.5%5D%5D%7D%5D")!
+        if case .addFish(let spec)? = PondCommand.parse(fishLink).command {
+            check("koipond://fish link parses", spec.pattern == .custom && spec.strokes.count == 1 && abs(spec.body.r - 0x22 / 255.0) < 0.001)
+        } else {
+            check("koipond://fish link parses", false, PondCommand.parse(fishLink).error ?? "")
+        }
+        check("koipond://scene link parses", PondCommand.parse(URL(string: "koipond://scene/dance")!).command == .scene(.dance))
+        check("bad link is refused with a reason", PondCommand.parse(URL(string: "koipond://scene/nowhere")!).error != nil)
+
         let finderIconLevel = Int(CGWindowLevelForKey(.desktopIconWindow))
         check("window level above desktop icons", panel.level.rawValue > finderIconLevel, "level=\(panel.level.rawValue) icons=\(finderIconLevel)")
 

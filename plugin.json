@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "koipond",
+  "version": "2.1.0",
+  "description": "让 AI agent 遥控 Mac 桌面上的中秋赏鱼鱼塘：切场景、撒鱼食、弹提示、按描述画锦鲤放进池塘、改源码加新玩法",
+  "author": { "name": "开发者猫叔", "url": "https://github.com/CatCatUncle" },
+  "homepage": "https://github.com/CatCatUncle/koipond",
+  "repository": "https://github.com/CatCatUncle/koipond",
+  "license": "MIT",
+  "keywords": ["macos", "desktop", "koi", "fun", "notification"]
+}
